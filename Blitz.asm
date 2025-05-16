@@ -1,3 +1,4 @@
+
 ;--------------------------------------------------------------------------------------------------------------------------------
 ;   Goal:   is to create a pixel with player movement using WASD-
 ;           and create enemies (or projectiles) that ends the game when hit
@@ -29,6 +30,14 @@
     message_score_1 equ $-message_score
     message_time db 'Time: '
     message_time_1 equ $-message_time
+; modify-difficultydisplay
+
+message_easy db 'Easy'
+message_easy_1 equ $ - message_easy
+message_medium db 'Medium'
+message_medium_1 equ $ - message_medium
+message_hard db 'Hard'
+message_hard_1 equ $ - message_hard
     message_quit db 'Exit[E]'
     message_quit_1 equ $-message_quit
     message_victory db 'You Win!'
@@ -126,6 +135,9 @@
     tens_1 equ $-tens
 
     temp dw 0
+difficulty_level db 0 
+border_color db 02h ; default to green (Easy)
+
 
     
     ;   character coords
@@ -2059,24 +2071,57 @@ Main PROC near  ;   PROC means Procedure (or Function)
         jmp wait_input      ; Jump back to wait_input if any other character is pressed
     
     level_resp:
-        mov ah, 01h         
-        int 16h             
-        jz level_resp       
-        mov ah, 00h        
-        int 16h             
-        cmp al, '1'
-        je Set_level1
-        cmp al, '2'
-        je Set_level2
-        cmp al, '3'
-        je Set_level3
-        cmp al, 'B'
-        je Back
-        cmp al, 'b'
-        je Back
+    mov ah, 01h         
+    int 16h             
+    jz level_resp        ; wait for key press
+    mov ah, 00h        
+    int 16h             
 
-        jmp level_resp  ; jump back to level resp if other keys are clicked
-    
+    cmp al, '1'
+je near ptr set_easy
+
+cmp al, '2'
+je near ptr set_medium
+
+cmp al, '3'
+je near ptr set_hard
+
+cmp al, 'B'
+je near ptr Back
+
+cmp al, 'b'
+je near ptr Back
+
+
+    jmp level_resp       ; if invalid key, wait again
+
+
+set_easy:
+    mov difficulty_level, 0
+    mov border_color, 02h ; green
+    jmp Set_Level1
+
+set_medium:
+    mov difficulty_level, 1
+    mov border_color, 01h ; blue
+    jmp Set_Level2
+
+set_hard:
+    mov difficulty_level, 2
+    mov border_color, 04h ; red
+    jmp Set_Level3
+ 
+
+Levels: 
+        call clear_screen
+        call display_choose_level
+        jmp level_resp
+
+Stop:
+        call clear_screen
+        call exit_program
+
+
     Character_Select:
         call Select_Character_Screen
 
@@ -2092,14 +2137,9 @@ Main PROC near  ;   PROC means Procedure (or Function)
         call clear_screen
         jmp Start
 
-    Stop:
-        call clear_screen
-        call exit_program
     
-    Levels: 
-        call clear_screen
-        call display_choose_level
-        jmp level_resp
+    
+    
 
     Set_Level1: 
         mov game_level, 1
@@ -2579,7 +2619,48 @@ display_game_hud proc near
     lea bp, message_quit   ;msg
     mov ax, 1301h   
     int 10h
+    
+; Show the actual difficulty based on game_level
+    cmp game_level, 1
+    je show_easy
+    cmp game_level, 2
+    je show_medium
+    cmp game_level, 3
+    je show_hard
+    jmp done_difficulty
+
+show_easy:
+    mov dh, 03
+    mov dl, 58
+    mov bx, 000Ah
+    mov cx, message_easy_1
+    lea bp, message_easy
+    mov ax, 1300h
+    int 10h
+    jmp done_difficulty
+
+show_medium:
+    mov dh, 03
+    mov dl, 58
+    mov bx, 000Eh
+    mov cx, message_medium_1
+    lea bp, message_medium
+    mov ax, 1300h
+    int 10h
+    jmp done_difficulty
+
+show_hard:
+    mov dh, 03
+    mov dl, 58
+    mov bx, 000Ch
+    mov cx, message_hard_1
+    lea bp, message_hard
+    mov ax, 1300h
+    int 10h
+
+done_difficulty:
     ret
+
 display_game_hud endp
 
 display_menu proc near
@@ -4559,7 +4640,7 @@ drawLeftBorder proc near
     
     Draw_LeftBorder_Horizontal:
         mov ah, 0Ch ;configuration to printing pixel
-        mov al, 02h ;color white
+        mov al, [border_color]
         mov bh, 00h ;page number (disregard)
         int 10h ; call dos for printing pixel
         inc cx  ; initial is cx ++, 161 0000 0000 
@@ -4582,7 +4663,7 @@ drawRightBorder proc near
 
     Draw_RightBorder_Horizontal:
         mov ah, 0Ch ;configuration to printing pixel
-        mov al, 02h ;color white
+        mov al, [border_color]
         mov bh, 00h ;page number (disregard)
         int 10h ; call dos for printing pixel
         inc cx  ; initial is cx ++, 161 0000 0000 
@@ -4605,7 +4686,7 @@ drawTopBorder proc near
 
     Draw_TopBorder_Horizontal:
         mov ah, 0Ch ;configuration to printing pixel
-        mov al, 02h ;color 
+        mov al, [border_color]
         mov bh, 00h ;page number (disregard)
         int 10h ; call dos for printing pixel
         inc cx  ; initial is cx ++, 161 0000 0000 
@@ -4628,7 +4709,7 @@ drawBottomBorder proc near
 
     Draw_BottomBorder_Horizontal:
         mov ah, 0Ch ;configuration to printing pixel
-        mov al, 02h ;color 
+        mov al, [border_color]
         mov bh, 00h ;page number (disregard)
         int 10h ; call dos for printing pixel
         inc cx  ; initial is cx ++, 161 0000 0000 
@@ -4644,6 +4725,7 @@ drawBottomBorder proc near
         jne Draw_BottomBorder_Horizontal        
     ret
 drawBottomBorder endp
+
 
 drawBorder proc near
     call DrawBottomBorder
@@ -4744,41 +4826,61 @@ border_collision proc near
 border_collision endp
 
 game_over proc near
-        call clear_screen
-        call menu_drawBottomBorder
-        call menu_drawTopBorder
-        call gameover_draw_header
-        call reset_variables
-        ; Return to Menu Prompt
-        mov ax, 1300h
-        mov dh, 16              ;   y
-        mov dl, 12              ;   x
-        mov bx, 000Dh           ;   page+color
-        mov cx, message_menu_1  ;   msg length
-        lea bp, message_menu    ;   msg
-        int 10h
-        ;   loop for user response
-        Loop_Game_Over:
-            mov ah, 01h         ;   check if which key is being pressed
-            int 16h             ;   ZF = 1 when there is no key press
-            JZ Loop_Game_Over
-        
-            mov ah, 00h
-            int 16h
+    call clear_screen
+    call menu_drawBottomBorder
+    call menu_drawTopBorder
+    call gameover_draw_header
+    call reset_variables
 
-            cmp al, 'b'
-            JNE Next_Game_Over
-            JMP start
+    ; Return to Menu Prompt
+    mov ax, 1300h
+    mov dh, 16              ; y position
+    mov dl, 12              ; x position
+    mov bx, 000Dh           ; page + color
+    mov cx, message_menu_1  ; msg length
+    lea bp, message_menu    ; msg
+    int 10h
 
-            Next_Game_Over:
-            cmp al, 'B'
-            JNE Next_Game_Over1
-            call reset_variables
-            JMP start
+    ; Try Again Prompt
+    mov ax, 1300h
+    mov dh, 18              ; y position
+    mov dl, 12              ; x position
+    mov bx, 000Bh           ; page + color
+    mov cx, message_retry_1 ; msg length
+    lea bp, message_retry   ; msg 
+    int 10h
 
-            Next_Game_Over1:
+    ; Loop for user response
+Loop_Game_Over:
+    mov ah, 01h             ; check if a key is pressed
+    int 16h                 ; ZF = 1 when there is no key press
+    jz Loop_Game_Over       ; if no key pressed, loop
 
-        JMP Loop_Game_Over
+    mov ah, 00h
+    int 16h                 ; read the key pressed into AL
+
+    ; Check for 'B' or 'b' to go back to menu
+    cmp al, 'b'
+    je back_to_menu
+    cmp al, 'B'
+    je back_to_menu
+
+    ; Check for 'T' or 't' to try again
+    cmp al, 't'
+    je try_again
+    cmp al, 'T'
+    je try_again
+
+    ; If neither key is pressed, loop again
+    jmp Loop_Game_Over
+
+back_to_menu:
+    jmp start               ; Assuming 'start' is the label for the main menu
+
+try_again:
+    call reset_variables     ; Reset game variables for a new attempt
+    jmp wait_input          ; Assuming 'wait_input' is the label to wait for the next input
+
     ret
 game_over endp
 
@@ -5769,7 +5871,7 @@ lvl2_next19:
         call set_enemy3_flag
         call set_enemy4_flag
         call set_enemy5_flag
-        call set_enemy6_flag
+    
         call set_enemy8_flag
         call set_enemy15_flag
 
@@ -5777,35 +5879,20 @@ lvl2_next20:
     cmp time_seconds, 6
     JNE lvl2_next21
         mov enemy_tick_speed, 3
-        call set_enemy1_flag
-        call set_enemy9_flag
-        call set_enemy2_flag
-        call set_enemy10_flag
         call set_enemy3_flag
         call set_enemy11_flag
-        call set_enemy4_flag
-        call set_enemy12_flag
-        call set_enemy8_flag
         call set_enemy7_flag
-        call set_enemy6_flag
         call set_enemy16_flag
         call set_enemy3_flag
         call set_enemy11_flag
         call set_enemy4_flag
-        call set_enemy12_flag
+      
         
     lvl2_next21:
     
     lvl2_next22:
     cmp time_seconds, 2
     JNE lvl2_next23
-        call set_enemy9_flag
-        call set_enemy10_flag
-        call set_enemy3_flag
-        call set_enemy4_flag
-        call set_enemy5_flag
-        call set_enemy15_flag
-        call set_enemy16_flag
         call set_enemy14_flag
         call set_enemy6_flag
         call set_enemy16_flag
@@ -6566,6 +6653,14 @@ display_victory proc near
     lea bp, message_menu   ;   msg 
     int 10h
 
+    ; Try again
+mov dh, 20              ;   y
+    mov dl, 16              ;   x
+    mov bx, 000Bh           ;   page + color
+    mov cx, message_retry_1 ;   msg length
+    lea bp, message_retry   ;   msg 
+    int 10h
+
     victory_wait_resp:
         mov ah, 01h         
         int 16h             
@@ -6580,13 +6675,26 @@ display_victory proc near
         je exit_victory
         cmp al, 'b'
         je exit_victory
+
+
+   ; Check for 'T' or 't' to try again
+    cmp al, 't'
+    je try_again1
+    cmp al, 'T'
+    je try_again1
+
+
+
         jmp victory_wait_resp 
-    
+    try_again1:
+    call reset_variables     ; Reset game variables for a new attempt
+    jmp wait_input          ; Assuming 'wait_input' is the label to wait for the next input
     save_score:
         call save_user_score
     exit_victory:
         call reset_variables
         jmp Start
+
     
     ret
 display_victory endp
@@ -7855,3 +7963,5 @@ leaderboard_draw2_header endp
 
 
 end Main                                             ;   End the main function
+
+
